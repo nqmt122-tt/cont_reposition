@@ -1,5 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    Empty Container Repositioning Optimizer — Frontend Logic
+   Uses Mapbox GL JS for the map with animated flow arrows.
+   Parameters match Empty_Container_Model.xlsx exactly.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -13,34 +15,51 @@ const PORT_REGIONS = {
   da_nang: 'Central', long_an: 'Mekong'
 };
 
-let solveResult = null;
+// Geo-coordinates for each port (lng, lat)
+const PORT_COORDS = {
+  cat_lai:   [106.7555, 10.7580],   // Cat Lai terminal, HCMC
+  cai_mep:   [107.0143, 10.5070],   // Cai Mep, Ba Ria-Vung Tau
+  hai_phong: [106.7520, 20.8449],   // Hai Phong port
+  da_nang:   [108.2120, 16.0680],   // Da Nang port
+  long_an:   [106.5760, 10.5260],   // Long An port (Mekong Delta)
+};
 
-// Default parameters (mirrors server defaults — editable via settings)
+// Port marker colors
+const PORT_COLORS = {
+  cat_lai: '#ef4444', cai_mep: '#f59e0b', hai_phong: '#3b82f6',
+  da_nang: '#a855f7', long_an: '#00d4aa'
+};
+
+let solveResult = null;
+let map = null;
+let mapLoaded = false;
+
+// Default parameters (from Excel model Parameters sheet)
 const params = {
   ports: {
-    cat_lai:  { capacity: 50000, storage_cost: 8,  lease_cost: 950,  import_rate: 25000, export_rate: 45000 },
-    cai_mep:  { capacity: 30000, storage_cost: 5,  lease_cost: 900,  import_rate: 20000, export_rate: 15000 },
-    hai_phong:{ capacity: 40000, storage_cost: 6,  lease_cost: 850,  import_rate: 30000, export_rate: 20000 },
-    da_nang:  { capacity: 15000, storage_cost: 5,  lease_cost: 1000, import_rate: 2000,  export_rate: 3200 },
-    long_an:  { capacity: 12000, storage_cost: 4,  lease_cost: 1100, import_rate: 2000,  export_rate: 5000 },
+    cat_lai:   { capacity: 50000, storage_cost: 8,    lease_cost: 850,  import_rate: 38000, export_rate: 62000 },
+    cai_mep:   { capacity: 65000, storage_cost: 5,    lease_cost: 900,  import_rate: 31500, export_rate: 43500 },
+    hai_phong: { capacity: 70000, storage_cost: 5.5,  lease_cost: 880,  import_rate: 81923, export_rate: 54615 },
+    da_nang:   { capacity: 15000, storage_cost: 5.5,  lease_cost: 1050, import_rate: 7015,  export_rate: 7600 },
+    long_an:   { capacity: 12000, storage_cost: 4,    lease_cost: 1100, import_rate: 2885,  export_rate: 6731 },
   },
   transport_cost: [
-    [0, 45, 130, 100, 60],
-    [45, 0, 140, 110, 55],
-    [130, 140, 0, 85, 160],
-    [100, 110, 85, 0, 140],
-    [60, 55, 160, 140, 0],
+    [0,      50.52,  148.14, 118.48, 46.76],
+    [50.52,  0,      149.34, 119.68, 53.46],
+    [148.14, 149.34, 0,      111.26, 149.94],
+    [118.48, 119.68, 111.26, 0,      120.28],
+    [46.76,  53.46,  149.94, 120.28, 0     ],
   ],
   transport_modes: [
-    ['—','Road','Coastal','Coastal','Barge'],
-    ['Road','—','Coastal','Coastal','Barge'],
-    ['Coastal','Coastal','—','Coastal','Coastal'],
-    ['Coastal','Coastal','Coastal','—','Coastal'],
-    ['Barge','Barge','Coastal','Coastal','—'],
+    ['—',    'Road',  'Sea',  'Sea',  'Road' ],
+    ['Road', '—',     'Sea',  'Sea',  'Barge'],
+    ['Sea',  'Sea',   '—',    'Sea',  'Sea'  ],
+    ['Sea',  'Sea',   'Sea',  '—',    'Sea'  ],
+    ['Road', 'Barge', 'Sea',  'Sea',  '—'    ],
   ],
   carbon_factors: { sea: 0.016, barge: 0.020, road: 0.062 },
-  carbon_price: 0.01,
-  storage_carbon_cost: 0.05,
+  carbon_price_per_kg: 0.005,
+  storage_carbon_cost: 0.5,
 };
 
 
@@ -50,8 +69,227 @@ document.addEventListener('DOMContentLoaded', () => {
   initSettingsModal();
   initSolveButton();
   initMapTabs();
-  renderVietnamMap();
+  initMapbox();
 });
+
+
+// ─── Mapbox Map ─────────────────────────────────────────────────────────────
+function initMapbox() {
+  mapboxgl.accessToken = 'YOUR_MAPBOX_ACCESS_TOKEN'; // TODO: Replace with a valid Mapbox token
+
+  map = new mapboxgl.Map({
+    container: 'mapbox-map',
+    style: 'mapbox://styles/mapbox/dark-v11',
+    center: [107.5, 14.5],    // Center of Vietnam
+    zoom: 5.2,
+    pitch: 0,
+    bearing: 0,
+    attributionControl: false,
+  });
+
+  map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+
+  map.on('load', () => {
+    mapLoaded = true;
+    addPortMarkers();
+    addFlowSources();
+  });
+}
+
+function addPortMarkers() {
+  for (const [id, coords] of Object.entries(PORT_COORDS)) {
+    const color = PORT_COLORS[id];
+    const label = PORT_LABELS[id];
+
+    // Create marker element
+    const el = document.createElement('div');
+    el.className = 'mapbox-port-marker';
+    el.id = `marker-${id}`;
+    el.innerHTML = `
+      <div class="marker-pulse" style="background: ${color}"></div>
+      <div class="marker-dot" style="background: ${color}"></div>
+      <div class="marker-label" style="color: ${color}">${label}</div>
+      <div class="marker-inv" id="inv-label-${id}"></div>
+    `;
+
+    new mapboxgl.Marker({ element: el, anchor: 'center' })
+      .setLngLat(coords)
+      .addTo(map);
+  }
+}
+
+function addFlowSources() {
+  // Add empty GeoJSON source for flow lines (will be updated when solver runs)
+  map.addSource('flow-lines', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] }
+  });
+
+  // Sea lines (blue)
+  map.addLayer({
+    id: 'flow-sea',
+    type: 'line',
+    source: 'flow-lines',
+    filter: ['==', ['get', 'mode'], 'Sea'],
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': '#3b82f6',
+      'line-width': ['get', 'width'],
+      'line-opacity': 0.8
+    }
+  });
+
+  // Barge lines (teal)
+  map.addLayer({
+    id: 'flow-barge',
+    type: 'line',
+    source: 'flow-lines',
+    filter: ['==', ['get', 'mode'], 'Barge'],
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': '#00d4aa',
+      'line-width': ['get', 'width'],
+      'line-opacity': 0.8
+    }
+  });
+
+  // Road lines (amber)
+  map.addLayer({
+    id: 'flow-road',
+    type: 'line',
+    source: 'flow-lines',
+    filter: ['==', ['get', 'mode'], 'Road'],
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': '#f59e0b',
+      'line-width': ['get', 'width'],
+      'line-opacity': 0.8
+    }
+  });
+
+  // Arrow heads along the lines
+  map.addLayer({
+    id: 'flow-arrows',
+    type: 'symbol',
+    source: 'flow-lines',
+    layout: {
+      'symbol-placement': 'line',
+      'symbol-spacing': 80,
+      'text-field': '▶',
+      'text-size': 24,
+      'text-keep-upright': false,
+      'text-allow-overlap': true,
+      'text-ignore-placement': true
+    },
+    paint: {
+      'text-color': ['get', 'color'],
+      'text-halo-color': 'rgba(6, 11, 24, 0.85)',
+      'text-halo-width': 1.5
+    }
+  });
+
+  // Volume labels
+  map.addSource('flow-labels', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] }
+  });
+
+  map.addLayer({
+    id: 'flow-label-layer',
+    type: 'symbol',
+    source: 'flow-labels',
+    layout: {
+      'text-field': ['get', 'label'],
+      'text-size': 11,
+      'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'],
+      'text-offset': [0, -1],
+      'text-allow-overlap': true,
+    },
+    paint: {
+      'text-color': ['get', 'color'],
+      'text-halo-color': 'rgba(6, 11, 24, 0.85)',
+      'text-halo-width': 1.5,
+    }
+  });
+}
+
+
+function renderMapFlows(strategyName) {
+  if (!mapLoaded || !solveResult) return;
+
+  const strategy = solveResult.strategies.find(s => s.name === strategyName);
+  if (!strategy) return;
+
+  const flow = strategy.flow_matrix;
+  const maxFlow = Math.max(1, ...flow.flat().filter(v => v > 0));
+
+  // Update inventory labels
+  for (const p of PORTS) {
+    const inv = strategy.end_inventory[p];
+    const el = document.getElementById(`inv-label-${p}`);
+    if (el) el.textContent = inv > 0 ? `${formatNum(inv)} TEU` : '';
+  }
+
+  // Build flow line features with curved paths
+  const lineFeatures = [];
+  const labelFeatures = [];
+
+  for (let i = 0; i < PORTS.length; i++) {
+    for (let j = 0; j < PORTS.length; j++) {
+      if (i === j || flow[i][j] <= 0) continue;
+      const from = PORT_COORDS[PORTS[i]];
+      const to = PORT_COORDS[PORTS[j]];
+      const volume = flow[i][j];
+      const mode = params.transport_modes[i][j];
+      const width = 2 + (volume / maxFlow) * 6;
+
+      // Create an arc (curved line) by adding a midpoint offset
+      const midLng = (from[0] + to[0]) / 2;
+      const midLat = (from[1] + to[1]) / 2;
+      const dx = to[0] - from[0];
+      const dy = to[1] - from[1];
+      const len = Math.sqrt(dx * dx + dy * dy);
+      // Perpendicular offset for curve
+      const offset = len * 0.15;
+      const nx = -dy / len * offset;
+      const ny = dx / len * offset;
+
+      const controlLng = midLng + nx;
+      const controlLat = midLat + ny;
+
+      // Generate smooth arc points
+      const points = [];
+      for (let t = 0; t <= 1; t += 0.05) {
+        const lng = (1 - t) * (1 - t) * from[0] + 2 * (1 - t) * t * controlLng + t * t * to[0];
+        const lat = (1 - t) * (1 - t) * from[1] + 2 * (1 - t) * t * controlLat + t * t * to[1];
+        points.push([lng, lat]);
+      }
+      points.push(to);
+
+      const modeColor = mode === 'Road' ? '#f59e0b' : mode === 'Barge' ? '#00d4aa' : '#3b82f6';
+
+      lineFeatures.push({
+        type: 'Feature',
+        properties: { mode, width, volume, color: modeColor },
+        geometry: { type: 'LineString', coordinates: points }
+      });
+
+      // Label at control point
+      labelFeatures.push({
+        type: 'Feature',
+        properties: { label: formatNum(volume), color: modeColor },
+        geometry: { type: 'Point', coordinates: [controlLng, controlLat] }
+      });
+    }
+  }
+
+  map.getSource('flow-lines').setData({
+    type: 'FeatureCollection', features: lineFeatures
+  });
+  map.getSource('flow-labels').setData({
+    type: 'FeatureCollection', features: labelFeatures
+  });
+}
 
 
 // ─── Barrier Slider ─────────────────────────────────────────────────────────
@@ -66,8 +304,7 @@ function initBarrierSlider() {
 
 // ─── Solve Button ───────────────────────────────────────────────────────────
 function initSolveButton() {
-  const btn = document.getElementById('btn-solve');
-  btn.addEventListener('click', runSolve);
+  document.getElementById('btn-solve').addEventListener('click', runSolve);
 }
 
 async function runSolve() {
@@ -79,7 +316,6 @@ async function runSolve() {
   PORTS.forEach(p => {
     inventory[p] = parseFloat(document.getElementById(`inv-${p}`).value) || 0;
   });
-
   const barrier = parseFloat(document.getElementById('barrier-slider').value);
 
   try {
@@ -92,7 +328,6 @@ async function runSolve() {
         parameters: params,
       }),
     });
-
     if (!resp.ok) throw new Error(`Server error: ${resp.status}`);
     solveResult = await resp.json();
     renderResults(solveResult);
@@ -110,21 +345,21 @@ async function runSolve() {
 function renderResults(data) {
   const section = document.getElementById('results-section');
   section.classList.add('active');
-
-  // Scroll to results
   setTimeout(() => section.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
 
   renderCostCards(data);
   renderFlowTable(data, 's2');
   renderMapFlows('s2');
-}
 
+  // Resize map after results become visible
+  setTimeout(() => { if (map) map.resize(); }, 200);
+}
 
 function renderCostCards(data) {
   const container = document.getElementById('results-cards');
   const strategies = data.strategies;
-  const s1Total = strategies[0].costs.total;
-  const maxCost = Math.max(...strategies.map(s => Math.max(s.costs.TC_H, s.costs.TC_R, s.costs.TC_W, s.costs.TC_C)));
+  const maxCost = Math.max(...strategies.map(s =>
+    Math.max(s.costs.TC_H, s.costs.TC_R, s.costs.TC_W, s.costs.TC_C)));
 
   container.innerHTML = strategies.map((s, idx) => {
     const savings = idx === 0 ? null :
@@ -142,17 +377,16 @@ function renderCostCards(data) {
         <div class="result-card__total">$${formatNum(s.costs.total)}</div>
         ${savingsHTML}
         <div class="cost-bars">
-          ${costBar('TC_H', 'Storage', s.costs.TC_H, maxCost, 'h')}
-          ${costBar('TC_R', 'Reposition', s.costs.TC_R, maxCost, 'r')}
-          ${costBar('TC_W', 'Leasing', s.costs.TC_W, maxCost, 'w')}
-          ${costBar('TC_C', 'Carbon', s.costs.TC_C, maxCost, 'c')}
+          ${costBar('TC_H', s.costs.TC_H, maxCost, 'h')}
+          ${costBar('TC_R', s.costs.TC_R, maxCost, 'r')}
+          ${costBar('TC_W', s.costs.TC_W, maxCost, 'w')}
+          ${costBar('TC_C', s.costs.TC_C, maxCost, 'c')}
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
 }
 
-function costBar(code, label, value, maxVal, cls) {
+function costBar(code, value, maxVal, cls) {
   const pct = maxVal > 0 ? (value / maxVal) * 100 : 0;
   return `
     <div class="cost-bar">
@@ -161,8 +395,7 @@ function costBar(code, label, value, maxVal, cls) {
         <div class="cost-bar__fill cost-bar__fill--${cls}" style="width: ${pct}%"></div>
       </div>
       <span class="cost-bar__value">$${formatNum(value)}</span>
-    </div>
-  `;
+    </div>`;
 }
 
 
@@ -182,19 +415,13 @@ function renderFlowTable(data, strategyName) {
   PORTS.forEach((p, i) => {
     html += `<tr><td><strong>${labels[i]}</strong></td>`;
     flow[i].forEach((val, j) => {
-      if (i === j) {
-        html += `<td class="flow-cell flow-cell--diag">—</td>`;
-      } else if (val > 0) {
-        html += `<td class="flow-cell flow-cell--active">${formatNum(val)}</td>`;
-      } else {
-        html += `<td class="flow-cell flow-cell--zero">0</td>`;
-      }
+      if (i === j) html += `<td class="flow-cell flow-cell--diag">—</td>`;
+      else if (val > 0) html += `<td class="flow-cell flow-cell--active">${formatNum(val)}</td>`;
+      else html += `<td class="flow-cell flow-cell--zero">0</td>`;
     });
     html += `<td class="flow-cell ${strategy.leasing[p] > 0 ? 'flow-cell--active' : 'flow-cell--zero'}">${formatNum(strategy.leasing[p])}</td>`;
-    html += `<td class="flow-cell">${formatNum(strategy.end_inventory[p])}</td>`;
-    html += `</tr>`;
+    html += `<td class="flow-cell">${formatNum(strategy.end_inventory[p])}</td></tr>`;
   });
-
   html += `</tbody></table>`;
   container.innerHTML = html;
 }
@@ -214,249 +441,18 @@ function initMapTabs() {
 }
 
 
-// ─── Vietnam SVG Map ────────────────────────────────────────────────────────
-// Approximate positions on a 600x820 canvas
-const MAP_PORTS = {
-  hai_phong: { x: 395, y: 175, color: '#3b82f6' },
-  da_nang:   { x: 370, y: 395, color: '#a855f7' },
-  cat_lai:   { x: 330, y: 620, color: '#ef4444' },
-  cai_mep:   { x: 365, y: 650, color: '#f59e0b' },
-  long_an:   { x: 290, y: 660, color: '#00d4aa' },
-};
-
-function renderVietnamMap() {
-  const container = document.getElementById('map-svg-container');
-  container.innerHTML = buildMapSVG();
-}
-
-function buildMapSVG() {
-  return `
-  <svg viewBox="0 0 600 820" xmlns="http://www.w3.org/2000/svg" id="vietnam-map">
-    <defs>
-      <!-- Glow filter for ports -->
-      <filter id="port-glow" x="-50%" y="-50%" width="200%" height="200%">
-        <feGaussianBlur stdDeviation="4" result="blur"/>
-        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-      <!-- Arrow markers by mode -->
-      <marker id="arrow-sea" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto" fill="#3b82f6">
-        <polygon points="0 0, 8 3, 0 6"/>
-      </marker>
-      <marker id="arrow-barge" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto" fill="#00d4aa">
-        <polygon points="0 0, 8 3, 0 6"/>
-      </marker>
-      <marker id="arrow-road" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto" fill="#f59e0b">
-        <polygon points="0 0, 8 3, 0 6"/>
-      </marker>
-      <!-- Animated dash -->
-      <style>
-        @keyframes dash-flow { to { stroke-dashoffset: -30; } }
-        .flow-line { animation: dash-flow 1.2s linear infinite; stroke-dasharray: 8 6; }
-        .port-pulse { animation: port-pulse-anim 2.5s ease-in-out infinite; }
-        @keyframes port-pulse-anim {
-          0%, 100% { r: 18; opacity: 0.15; }
-          50% { r: 24; opacity: 0.08; }
-        }
-      </style>
-    </defs>
-
-    <!-- Vietnam coastline (simplified sketch path) -->
-    <path d="
-      M 380 60
-      C 400 70, 420 90, 415 110
-      C 410 130, 420 150, 410 170
-      L 400 180
-      C 405 200, 395 230, 400 250
-      C 405 270, 400 290, 390 310
-      C 385 330, 380 350, 375 370
-      C 370 385, 375 400, 370 410
-      C 360 440, 350 460, 345 480
-      C 340 500, 335 520, 340 540
-      C 345 555, 350 570, 345 585
-      C 340 600, 335 620, 340 640
-      C 345 660, 335 680, 310 700
-      C 290 720, 260 710, 240 700
-      C 220 690, 240 670, 260 660
-      C 280 650, 295 635, 310 620
-      C 320 610, 325 590, 320 570
-      C 315 550, 310 530, 315 510
-      C 318 495, 315 480, 310 465
-      C 305 450, 300 435, 305 420
-      C 308 405, 310 390, 305 375
-      C 298 350, 295 330, 300 310
-      C 305 290, 310 275, 305 255
-      C 300 240, 295 220, 300 200
-      C 305 180, 320 170, 330 155
-      C 335 145, 340 135, 345 120
-      C 350 105, 355 90, 360 80
-      C 365 70, 375 65, 380 60
-      Z
-    " fill="rgba(30, 55, 95, 0.25)" stroke="rgba(100, 180, 255, 0.2)" stroke-width="1.5"/>
-
-    <!-- Northern border region (sketch) -->
-    <path d="
-      M 380 60
-      C 370 50, 350 40, 330 45
-      C 310 50, 290 55, 275 65
-      C 260 75, 250 90, 240 100
-      C 230 115, 245 130, 260 140
-      C 280 148, 300 155, 320 155
-      C 330 155, 340 135, 345 120
-      C 350 105, 355 90, 360 80
-      C 365 70, 375 65, 380 60
-    " fill="none" stroke="rgba(100, 180, 255, 0.15)" stroke-width="1" stroke-dasharray="4 4"/>
-
-    <!-- Mekong Delta fan (sketch) -->
-    <path d="
-      M 310 640
-      C 300 660, 280 680, 260 690
-      C 250 695, 240 700, 230 695
-      M 310 640
-      C 305 665, 290 685, 275 695
-      M 310 640
-      C 315 665, 300 690, 285 700
-    " fill="none" stroke="rgba(100, 180, 255, 0.12)" stroke-width="1"/>
-
-    <!-- Paracel Islands (Hoàng Sa) -->
-    <g transform="translate(460, 330)">
-      <circle r="3" fill="rgba(100, 180, 255, 0.3)" stroke="rgba(100, 180, 255, 0.4)" stroke-width="0.8"/>
-      <circle cx="10" cy="-5" r="2" fill="rgba(100, 180, 255, 0.25)"/>
-      <circle cx="5" cy="8" r="2.5" fill="rgba(100, 180, 255, 0.25)"/>
-      <circle cx="-7" cy="4" r="1.8" fill="rgba(100, 180, 255, 0.2)"/>
-      <circle cx="15" cy="6" r="1.5" fill="rgba(100, 180, 255, 0.2)"/>
-      <!-- Dashed sovereignty circle -->
-      <circle r="28" fill="none" stroke="rgba(100, 180, 255, 0.12)" stroke-width="0.8" stroke-dasharray="3 3"/>
-      <text y="40" text-anchor="middle" fill="rgba(100, 180, 255, 0.35)" font-size="8" font-family="Inter, sans-serif" font-weight="600">
-        Hoàng Sa
-      </text>
-      <text y="50" text-anchor="middle" fill="rgba(100, 180, 255, 0.22)" font-size="6" font-family="Inter, sans-serif">
-        (Paracel Is.)
-      </text>
-    </g>
-
-    <!-- Spratly Islands (Trường Sa) -->
-    <g transform="translate(490, 560)">
-      <circle r="2" fill="rgba(100, 180, 255, 0.25)" stroke="rgba(100, 180, 255, 0.35)" stroke-width="0.8"/>
-      <circle cx="12" cy="-8" r="1.5" fill="rgba(100, 180, 255, 0.2)"/>
-      <circle cx="-8" cy="10" r="1.8" fill="rgba(100, 180, 255, 0.2)"/>
-      <circle cx="8" cy="12" r="1.3" fill="rgba(100, 180, 255, 0.18)"/>
-      <circle cx="-12" cy="-5" r="1.5" fill="rgba(100, 180, 255, 0.18)"/>
-      <circle cx="18" cy="5" r="1" fill="rgba(100, 180, 255, 0.15)"/>
-      <!-- Dashed sovereignty circle -->
-      <circle r="32" fill="none" stroke="rgba(100, 180, 255, 0.12)" stroke-width="0.8" stroke-dasharray="3 3"/>
-      <text y="45" text-anchor="middle" fill="rgba(100, 180, 255, 0.35)" font-size="8" font-family="Inter, sans-serif" font-weight="600">
-        Trường Sa
-      </text>
-      <text y="55" text-anchor="middle" fill="rgba(100, 180, 255, 0.22)" font-size="6" font-family="Inter, sans-serif">
-        (Spratly Is.)
-      </text>
-    </g>
-
-    <!-- Sea label -->
-    <text x="500" y="450" fill="rgba(100, 180, 255, 0.12)" font-size="14" font-family="Inter, sans-serif"
-          font-weight="700" letter-spacing="6" transform="rotate(90, 500, 450)">EAST SEA</text>
-
-    <!-- Flow arrows group (populated dynamically) -->
-    <g id="flow-arrows"></g>
-
-    <!-- Port markers -->
-    ${Object.entries(MAP_PORTS).map(([id, p]) => `
-      <g class="port-marker" data-port="${id}">
-        <circle class="port-pulse" cx="${p.x}" cy="${p.y}" fill="${p.color}" opacity="0.15" r="18"/>
-        <circle cx="${p.x}" cy="${p.y}" r="7" fill="${p.color}" filter="url(#port-glow)" opacity="0.9"/>
-        <circle cx="${p.x}" cy="${p.y}" r="3.5" fill="white" opacity="0.9"/>
-        <text x="${p.x}" y="${p.y - 16}" text-anchor="middle" fill="${p.color}"
-              font-size="10" font-weight="700" font-family="Inter, sans-serif">${PORT_LABELS[id]}</text>
-        <text x="${p.x}" y="${p.y + 22}" text-anchor="middle" fill="rgba(200,220,255,0.4)"
-              font-size="7" font-family="Inter, sans-serif" class="port-inv-label" data-port="${id}"></text>
-      </g>
-    `).join('')}
-  </svg>
-  `;
-}
-
-
-function renderMapFlows(strategyName) {
-  const arrowGroup = document.getElementById('flow-arrows');
-  if (!arrowGroup || !solveResult) return;
-  arrowGroup.innerHTML = '';
-
-  const strategy = solveResult.strategies.find(s => s.name === strategyName);
-  if (!strategy) return;
-
-  const flow = strategy.flow_matrix;
-  const maxFlow = Math.max(1, ...flow.flat());
-
-  // Update inventory labels on map
-  document.querySelectorAll('.port-inv-label').forEach(el => {
-    const p = el.dataset.port;
-    const inv = strategy.end_inventory[p];
-    el.textContent = inv > 0 ? `${formatNum(inv)} TEU` : '';
-  });
-
-  // Draw flow arrows
-  for (let i = 0; i < PORTS.length; i++) {
-    for (let j = 0; j < PORTS.length; j++) {
-      if (i === j || flow[i][j] <= 0) continue;
-      const from = MAP_PORTS[PORTS[i]];
-      const to = MAP_PORTS[PORTS[j]];
-      const volume = flow[i][j];
-      const mode = params.transport_modes[i][j];
-
-      const modeClass = mode === 'Road' ? 'road' : mode === 'Barge' ? 'barge' : 'sea';
-      const color = mode === 'Road' ? '#f59e0b' : mode === 'Barge' ? '#00d4aa' : '#3b82f6';
-      const width = 1.5 + (volume / maxFlow) * 4;
-
-      // Offset path so bidirectional flows don't overlap
-      const dx = to.x - from.x;
-      const dy = to.y - from.y;
-      const len = Math.sqrt(dx * dx + dy * dy);
-      const nx = -dy / len * 8;
-      const ny = dx / len * 8;
-
-      // Curved path via control point
-      const mx = (from.x + to.x) / 2 + nx;
-      const my = (from.y + to.y) / 2 + ny;
-
-      const path = `M ${from.x} ${from.y} Q ${mx} ${my} ${to.x} ${to.y}`;
-
-      arrowGroup.innerHTML += `
-        <path d="${path}" fill="none" stroke="${color}" stroke-width="${width}"
-              stroke-opacity="0.6" class="flow-line"
-              marker-end="url(#arrow-${modeClass})"/>
-      `;
-
-      // Volume label at midpoint
-      const labelX = mx;
-      const labelY = my - 6;
-      arrowGroup.innerHTML += `
-        <text x="${labelX}" y="${labelY}" text-anchor="middle" fill="${color}"
-              font-size="8" font-weight="700" font-family="JetBrains Mono, monospace"
-              opacity="0.8">${formatNum(volume)}</text>
-      `;
-    }
-  }
-}
-
-
 // ─── Settings Modal ─────────────────────────────────────────────────────────
 function initSettingsModal() {
   const modal = document.getElementById('settings-modal');
-  const btnOpen = document.getElementById('btn-settings');
-  const btnClose = document.getElementById('modal-close');
-  const btnApply = document.getElementById('modal-apply');
-
-  btnOpen.addEventListener('click', () => {
+  document.getElementById('btn-settings').addEventListener('click', () => {
     renderSettingsTables();
     modal.classList.add('active');
   });
-
-  btnClose.addEventListener('click', () => modal.classList.remove('active'));
-  btnApply.addEventListener('click', () => {
+  document.getElementById('modal-close').addEventListener('click', () => modal.classList.remove('active'));
+  document.getElementById('modal-apply').addEventListener('click', () => {
     readSettingsFromTables();
     modal.classList.remove('active');
   });
-
   modal.addEventListener('click', e => {
     if (e.target === modal) modal.classList.remove('active');
   });
@@ -471,12 +467,11 @@ function initSettingsModal() {
     });
   });
 
-  // AI interpretation (placeholder)
+  // AI interpretation placeholder
   document.getElementById('btn-interpret').addEventListener('click', showInterpretation);
 }
 
 function renderSettingsTables() {
-  // Port parameters
   const portsBody = document.getElementById('ports-table-body');
   portsBody.innerHTML = PORTS.map(p => {
     const pp = params.ports[p];
@@ -490,7 +485,6 @@ function renderSettingsTables() {
     </tr>`;
   }).join('');
 
-  // Transport costs
   const transportBody = document.getElementById('transport-table-body');
   transportBody.innerHTML = PORTS.map((p, i) => {
     return `<tr>
@@ -498,44 +492,38 @@ function renderSettingsTables() {
       ${params.transport_cost[i].map((cost, j) => {
         if (i === j) return `<td style="color: var(--text-muted); opacity: 0.3;">—</td>`;
         const mode = params.transport_modes[i][j];
-        return `<td><input type="number" data-from="${i}" data-to="${j}" value="${cost}" step="5">
+        return `<td><input type="number" data-from="${i}" data-to="${j}" value="${cost}" step="1">
                 <br><span style="font-size: 0.6rem; color: var(--text-muted);">${mode}</span></td>`;
       }).join('')}
     </tr>`;
   }).join('');
 
-  // Carbon parameters
   const carbonBody = document.getElementById('carbon-table-body');
   carbonBody.innerHTML = `
     <tr><td>Sea Emission Factor</td><td><input type="number" id="set-carbon-sea" value="${params.carbon_factors.sea}" step="0.001"></td><td>kg CO₂/TEU-km</td></tr>
     <tr><td>Barge Emission Factor</td><td><input type="number" id="set-carbon-barge" value="${params.carbon_factors.barge}" step="0.001"></td><td>kg CO₂/TEU-km</td></tr>
     <tr><td>Road Emission Factor</td><td><input type="number" id="set-carbon-road" value="${params.carbon_factors.road}" step="0.001"></td><td>kg CO₂/TEU-km</td></tr>
-    <tr><td>Carbon Price</td><td><input type="number" id="set-carbon-price" value="${params.carbon_price}" step="0.001"></td><td>USD/kg CO₂</td></tr>
+    <tr><td>Carbon Price</td><td><input type="number" id="set-carbon-price" value="${params.carbon_price_per_kg}" step="0.001"></td><td>USD/kg CO₂</td></tr>
     <tr><td>Storage Carbon Cost</td><td><input type="number" id="set-storage-carbon" value="${params.storage_carbon_cost}" step="0.01"></td><td>USD/TEU/week</td></tr>
   `;
 }
 
 function readSettingsFromTables() {
-  // Port parameters
   document.querySelectorAll('#ports-table-body input').forEach(inp => {
     const port = inp.dataset.port;
     const field = inp.dataset.field;
     params.ports[port][field] = parseFloat(inp.value) || 0;
   });
-
-  // Transport costs
   document.querySelectorAll('#transport-table-body input').forEach(inp => {
     const from = parseInt(inp.dataset.from);
     const to = parseInt(inp.dataset.to);
     params.transport_cost[from][to] = parseFloat(inp.value) || 0;
   });
-
-  // Carbon
   params.carbon_factors.sea = parseFloat(document.getElementById('set-carbon-sea').value) || 0.016;
   params.carbon_factors.barge = parseFloat(document.getElementById('set-carbon-barge').value) || 0.020;
   params.carbon_factors.road = parseFloat(document.getElementById('set-carbon-road').value) || 0.062;
-  params.carbon_price = parseFloat(document.getElementById('set-carbon-price').value) || 0.01;
-  params.storage_carbon_cost = parseFloat(document.getElementById('set-storage-carbon').value) || 0.05;
+  params.carbon_price_per_kg = parseFloat(document.getElementById('set-carbon-price').value) || 0.005;
+  params.storage_carbon_cost = parseFloat(document.getElementById('set-storage-carbon').value) || 0.5;
 }
 
 
@@ -547,31 +535,27 @@ function showInterpretation() {
   div.classList.add('active');
 
   const s = solveResult.strategies;
-  const s1 = s[0].costs;
-  const s2 = s[1].costs;
-  const s3 = s[2].costs;
-
-  // Generate a structured interpretation from the data
+  const s1 = s[0].costs, s2 = s[1].costs, s3 = s[2].costs;
   const s2Savings = solveResult.savings_s2_vs_s1;
   const s3Savings = solveResult.savings_s3_vs_s1;
+
   const biggestS1Cost = Object.entries({ Storage: s1.TC_H, Repositioning: s1.TC_R, Leasing: s1.TC_W, Carbon: s1.TC_C })
     .sort((a, b) => b[1] - a[1])[0];
 
   content.innerHTML = `
     <p><strong>🤖 AI Interpretation</strong> <span style="color: var(--text-muted); font-size: 0.78rem;">(Placeholder — connect your LLM API for dynamic insights)</span></p>
-    <p>Under the <strong>Status Quo (S1)</strong>, the total weekly cost is <strong>$${formatNum(s1.total)}</strong>, 
-    with <strong>${biggestS1Cost[0]}</strong> being the dominant cost driver at $${formatNum(biggestS1Cost[1])}. 
+    <p>Under the <strong>Status Quo (S1)</strong>, the total weekly cost is <strong>$${formatNum(s1.total)}</strong>,
+    with <strong>${biggestS1Cost[0]}</strong> being the dominant cost driver at $${formatNum(biggestS1Cost[1])}.
     This reflects the inefficiency of disconnected port operations.</p>
-    <p>The <strong>Regional Threshold (S2)</strong> strategy reduces costs by <strong>${s2Savings.toFixed(1)}%</strong> 
-    to $${formatNum(s2.total)}/week. Repositioning costs of $${formatNum(s2.TC_R)} are introduced 
+    <p>The <strong>Regional Threshold (S2)</strong> strategy reduces costs by <strong>${s2Savings.toFixed(1)}%</strong>
+    to $${formatNum(s2.total)}/week. Repositioning costs of $${formatNum(s2.TC_R)} are introduced
     but are more than offset by reductions in leasing ($${formatNum(s1.TC_W)} → $${formatNum(s2.TC_W)}).</p>
-    <p>The <strong>National Network (S3)</strong> achieves the optimal solution at <strong>$${formatNum(s3.total)}/week</strong>, 
-    a <strong>${s3Savings.toFixed(1)}%</strong> reduction. This scenario requires full inter-port coordination 
+    <p>The <strong>National Network (S3)</strong> achieves the optimal solution at <strong>$${formatNum(s3.total)}/week</strong>,
+    a <strong>${s3Savings.toFixed(1)}%</strong> reduction. This scenario requires full inter-port coordination
     and unified digital infrastructure.</p>
-    <p>💡 <strong>Annual savings potential:</strong> S2 saves ~$${formatNum((s1.total - s2.total) * 52)}/year, 
+    <p>💡 <strong>Annual savings potential:</strong> S2 saves ~$${formatNum((s1.total - s2.total) * 52)}/year,
     while S3 saves ~$${formatNum((s1.total - s3.total) * 52)}/year compared to the status quo.</p>
   `;
-
   div.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 

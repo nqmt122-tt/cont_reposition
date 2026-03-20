@@ -588,9 +588,77 @@ body::after {
   min-height: 520px;
 }
 
-.map-container svg {
-  width: 100%;
-  height: auto;
+/* Mapbox overrides */
+#mapbox-map {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.mapboxgl-canvas { border-radius: 12px; }
+
+/* Port Markers on Mapbox */
+.mapbox-port-marker {
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.marker-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  box-shadow: 0 0 8px currentColor;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+}
+
+.marker-pulse {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.3;
+  z-index: 1;
+  animation: marker-pulse-anim 2.5s ease-out infinite;
+}
+
+@keyframes marker-pulse-anim {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.5; }
+  100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+}
+
+.marker-label {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  z-index: 3;
+}
+
+.marker-inv {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.62rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  z-index: 3;
 }
 
 .map-legend {
