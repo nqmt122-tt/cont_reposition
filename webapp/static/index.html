@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Empty Container Repositioning Optimizer — Vietnam</title>
+  <meta name="description" content="Interactive demo for optimizing empty container repositioning across Vietnam's port network using LP-based cost minimization.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+  <!-- ═══════════════════ HERO ═══════════════════ -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero__badge">Optimization Model Demo</div>
+      <h1>Empty Container Repositioning<br>in Vietnam's Port Network</h1>
+      <p class="hero__subtitle">
+        Vietnam's trade surplus creates a structural imbalance — export-heavy ports run out of containers 
+        while import-oriented ports accumulate excess. This tool simulates three coordination strategies 
+        to minimize total repositioning, storage, leasing, and carbon costs.
+      </p>
+      <div class="hero__stats">
+        <div class="hero__stat">
+          <div class="hero__stat-value">29.9M</div>
+          <div class="hero__stat-label">TEU Handled (2024)</div>
+        </div>
+        <div class="hero__stat">
+          <div class="hero__stat-value">$24.8B</div>
+          <div class="hero__stat-label">Trade Surplus</div>
+        </div>
+        <div class="hero__stat">
+          <div class="hero__stat-value">$185M</div>
+          <div class="hero__stat-label">Annual D&D Charges</div>
+        </div>
+        <div class="hero__stat">
+          <div class="hero__stat-value">5</div>
+          <div class="hero__stat-label">Port Clusters</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ STRATEGY EXPLAINER ═══════════════════ -->
+  <section class="section">
+    <div class="container">
+      <div class="section__header">
+        <div class="section__title">
+          <div class="section__title-icon">📋</div>
+          Strategy Comparison
+        </div>
+      </div>
+      <div class="strategies">
+        <div class="strategy-card strategy-card--s1">
+          <div class="strategy-card__tag">Baseline</div>
+          <div class="strategy-card__title">S1: Status Quo</div>
+          <p class="strategy-card__desc">
+            Every port operates independently. No coordinated repositioning between ports — if a port runs out
+            of containers, it must lease at premium rates. Reflects the current fragmented state.
+          </p>
+        </div>
+        <div class="strategy-card strategy-card--s2">
+          <div class="strategy-card__tag">Recommended</div>
+          <div class="strategy-card__title">S2: Regional Thresholds</div>
+          <p class="strategy-card__desc">
+            Ports share containers but protect local buffers. A port only repositions surplus containers 
+            after its inventory exceeds a threshold (barrier coefficient × capacity). Realistic &amp; practical.
+          </p>
+        </div>
+        <div class="strategy-card strategy-card--s3">
+          <div class="strategy-card__tag">Optimal</div>
+          <div class="strategy-card__title">S3: National Network</div>
+          <p class="strategy-card__desc">
+            Full national coordination — the optimizer freely moves containers across all ports to minimize 
+            total system cost. Represents the theoretical best-case requiring unified digital infrastructure.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ INPUT PANEL ═══════════════════ -->
+  <section class="section">
+    <div class="container">
+      <div class="section__header">
+        <div class="section__title">
+          <div class="section__title-icon">📦</div>
+          Initial Container Inventory
+        </div>
+        <button class="btn btn--secondary btn--icon" id="btn-settings" title="Advanced Parameters">
+          ⚙️
+        </button>
+      </div>
+      <div class="glass-card">
+        <div class="input-grid">
+          <div class="input-port">
+            <div class="input-port__label">Cat Lai</div>
+            <div class="input-port__region">South (HCMC)</div>
+            <input type="number" id="inv-cat_lai" value="5000" min="0" step="1000" placeholder="TEU">
+          </div>
+          <div class="input-port">
+            <div class="input-port__label">Cai Mep</div>
+            <div class="input-port__region">South (BR-VT)</div>
+            <input type="number" id="inv-cai_mep" value="18000" min="0" step="1000" placeholder="TEU">
+          </div>
+          <div class="input-port">
+            <div class="input-port__label">Hai Phong</div>
+            <div class="input-port__region">North</div>
+            <input type="number" id="inv-hai_phong" value="30000" min="0" step="1000" placeholder="TEU">
+          </div>
+          <div class="input-port">
+            <div class="input-port__label">Da Nang</div>
+            <div class="input-port__region">Central</div>
+            <input type="number" id="inv-da_nang" value="1000" min="0" step="1000" placeholder="TEU">
+          </div>
+          <div class="input-port">
+            <div class="input-port__label">Long An</div>
+            <div class="input-port__region">Mekong Delta</div>
+            <input type="number" id="inv-long_an" value="1000" min="0" step="1000" placeholder="TEU">
+          </div>
+        </div>
+
+        <div class="input-controls">
+          <div class="input-barrier">
+            <label for="barrier-slider">Barrier Coefficient (s):</label>
+            <input type="range" id="barrier-slider" min="0" max="1" step="0.05" value="0.5">
+            <span class="input-barrier__value" id="barrier-value">0.50</span>
+          </div>
+          <button class="btn btn--primary" id="btn-solve">
+            <span class="btn__text">▶ Run Simulation</span>
+            <span class="btn__spinner"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ RESULTS ═══════════════════ -->
+  <div class="results" id="results-section">
+
+    <!-- Cost Comparison Cards -->
+    <section class="section">
+      <div class="container">
+        <div class="section__header">
+          <div class="section__title">
+            <div class="section__title-icon">📊</div>
+            Cost Comparison (Weekly)
+          </div>
+          <button class="btn btn--secondary" id="btn-interpret" title="AI Interpretation">
+            🤖 Interpret Results
+          </button>
+        </div>
+        <div class="results-comparison" id="results-cards"></div>
+
+        <!-- AI Interpretation placeholder -->
+        <div class="interpretation" id="interpretation">
+          <div class="interpretation__content" id="interpretation-content"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Flow Map -->
+    <section class="section">
+      <div class="container">
+        <div class="section__header">
+          <div class="section__title">
+            <div class="section__title-icon">🗺️</div>
+            Container Flow Map
+          </div>
+        </div>
+        <div class="map-container">
+          <div class="map-tabs" id="map-tabs">
+            <button class="map-tab active" data-strategy="s2">S2: Thresholds</button>
+            <button class="map-tab" data-strategy="s3">S3: National Network</button>
+          </div>
+          <div id="map-svg-container"></div>
+          <div class="map-legend">
+            <div class="map-legend__item"><div class="map-legend__dot map-legend__dot--sea"></div> Coastal Sea</div>
+            <div class="map-legend__item"><div class="map-legend__dot map-legend__dot--barge"></div> Inland Barge</div>
+            <div class="map-legend__item"><div class="map-legend__dot map-legend__dot--road"></div> Road</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Flow Detail Table -->
+    <section class="section">
+      <div class="container">
+        <div class="section__header">
+          <div class="section__title">
+            <div class="section__title-icon">📝</div>
+            Repositioning Flow Matrix
+          </div>
+        </div>
+        <div class="glass-card flow-table-wrapper">
+          <div id="flow-table-container"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ═══════════════════ SETTINGS MODAL ═══════════════════ -->
+  <div class="modal-overlay" id="settings-modal">
+    <div class="modal">
+      <div class="modal__header">
+        <div class="modal__title">⚙️ Advanced Parameters</div>
+        <button class="modal__close" id="modal-close">✕</button>
+      </div>
+      <div class="settings-tabs">
+        <button class="settings-tab active" data-panel="panel-ports">Port Parameters</button>
+        <button class="settings-tab" data-panel="panel-transport">Transport Costs</button>
+        <button class="settings-tab" data-panel="panel-carbon">Carbon & Emissions</button>
+      </div>
+
+      <!-- Port Parameters -->
+      <div class="settings-panel active" id="panel-ports">
+        <table>
+          <thead>
+            <tr>
+              <th>Port</th>
+              <th>Capacity (TEU)</th>
+              <th>Storage $/wk</th>
+              <th>Lease $/TEU</th>
+              <th>Import TEU/wk</th>
+              <th>Export TEU/wk</th>
+            </tr>
+          </thead>
+          <tbody id="ports-table-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Transport Costs -->
+      <div class="settings-panel" id="panel-transport">
+        <table>
+          <thead>
+            <tr>
+              <th>From \ To</th>
+              <th>Cat Lai</th>
+              <th>Cai Mep</th>
+              <th>Hai Phong</th>
+              <th>Da Nang</th>
+              <th>Long An</th>
+            </tr>
+          </thead>
+          <tbody id="transport-table-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Carbon -->
+      <div class="settings-panel" id="panel-carbon">
+        <table>
+          <thead>
+            <tr><th>Parameter</th><th>Value</th><th>Unit</th></tr>
+          </thead>
+          <tbody id="carbon-table-body"></tbody>
+        </table>
+      </div>
+
+      <div style="margin-top: 20px; text-align: right;">
+        <button class="btn btn--primary" id="modal-apply">Apply & Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ FOOTER ═══════════════════ -->
+  <footer class="footer">
+    <div class="container">
+      Empty Container Repositioning Optimizer · Academic Research Demo · 2024–2026
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

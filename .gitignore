@@ -1,0 +1,15 @@
+# Git Ignore
+.agent/
+.agents/
+skills-lock.json
+~$*.xlsx
+**/__pycache__/
+*.pyc
+.DS_Store
+Empty_Container_Model.xlsx
+Explanation_ExcelModel.md
+Mathematical Models for Empty Container Repositioning Costs.md
+Methodology - Optimizing Empty Container Repositioning in Vietnam.md
+README_Excel.md
+README_GoogleSheets.md
+save_results.gs
