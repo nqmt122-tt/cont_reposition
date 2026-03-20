@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ─── Mapbox Map ─────────────────────────────────────────────────────────────
 function initMapbox() {
-  mapboxgl.accessToken = 'YOUR_MAPBOX_ACCESS_TOKEN'; // TODO: Replace with a valid Mapbox token
+  mapboxgl.accessToken = typeof MAPBOX_TOKEN !== 'undefined' ? MAPBOX_TOKEN : 'YOUR_MAPBOX_ACCESS_TOKEN';
 
   map = new mapboxgl.Map({
     container: 'mapbox-map',
