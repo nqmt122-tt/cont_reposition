@@ -102,26 +102,31 @@
             <div class="input-port__label">Cat Lai</div>
             <div class="input-port__region">South (HCMC)</div>
             <input type="number" id="inv-cat_lai" value="25000" min="0" step="1000" placeholder="TEU">
+            <div class="input-port__capacity" id="cap-cat_lai"></div>
           </div>
           <div class="input-port">
             <div class="input-port__label">Cai Mep</div>
             <div class="input-port__region">South (BR-VT)</div>
             <input type="number" id="inv-cai_mep" value="30000" min="0" step="1000" placeholder="TEU">
+            <div class="input-port__capacity" id="cap-cai_mep"></div>
           </div>
           <div class="input-port">
             <div class="input-port__label">Hai Phong</div>
             <div class="input-port__region">North</div>
             <input type="number" id="inv-hai_phong" value="60000" min="0" step="1000" placeholder="TEU">
+            <div class="input-port__capacity" id="cap-hai_phong"></div>
           </div>
           <div class="input-port">
             <div class="input-port__label">Da Nang</div>
             <div class="input-port__region">Central</div>
             <input type="number" id="inv-da_nang" value="8000" min="0" step="1000" placeholder="TEU">
+            <div class="input-port__capacity" id="cap-da_nang"></div>
           </div>
           <div class="input-port">
             <div class="input-port__label">Long An</div>
             <div class="input-port__region">Mekong Delta</div>
             <input type="number" id="inv-long_an" value="3000" min="0" step="1000" placeholder="TEU">
+            <div class="input-port__capacity" id="cap-long_an"></div>
           </div>
         </div>
 
@@ -143,47 +148,38 @@
   <!-- ═══════════════════ RESULTS ═══════════════════ -->
   <div class="results" id="results-section">
 
-    <!-- Cost Comparison Cards -->
+    <!-- Combined Map + Cost Cards -->
     <section class="section">
       <div class="container">
         <div class="section__header">
           <div class="section__title">
             <div class="section__title-icon">📊</div>
-            Cost Comparison (Weekly)
+            Optimization Results (Weekly)
           </div>
           <button class="btn btn--secondary" id="btn-interpret" title="AI Interpretation">
             🤖 Interpret Results
           </button>
         </div>
-        <div class="results-comparison" id="results-cards"></div>
+
+        <div class="results-combined">
+          <!-- Left: Map (70%) -->
+          <div class="results-map-pane">
+            <div class="map-container">
+              <div class="map-tabs" id="map-tabs">
+                <button class="map-tab active" data-strategy="s2">S2: Thresholds</button>
+                <button class="map-tab" data-strategy="s3">S3: National Network</button>
+              </div>
+              <div id="mapbox-map"></div>
+            </div>
+          </div>
+
+          <!-- Right: Cost Cards (30%) -->
+          <div class="results-costs-pane" id="results-cards"></div>
+        </div>
 
         <!-- AI Interpretation placeholder -->
         <div class="interpretation" id="interpretation">
           <div class="interpretation__content" id="interpretation-content"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Flow Map (Mapbox) -->
-    <section class="section">
-      <div class="container">
-        <div class="section__header">
-          <div class="section__title">
-            <div class="section__title-icon">🗺️</div>
-            Container Flow Map
-          </div>
-        </div>
-        <div class="map-container">
-          <div class="map-tabs" id="map-tabs">
-            <button class="map-tab active" data-strategy="s2">S2: Thresholds</button>
-            <button class="map-tab" data-strategy="s3">S3: National Network</button>
-          </div>
-          <div id="mapbox-map" style="width: 100%; height: 520px; border-radius: 12px;"></div>
-          <div class="map-legend">
-            <div class="map-legend__item"><div class="map-legend__dot map-legend__dot--sea"></div> Coastal Sea</div>
-            <div class="map-legend__item"><div class="map-legend__dot map-legend__dot--barge"></div> Inland Barge</div>
-            <div class="map-legend__item"><div class="map-legend__dot map-legend__dot--road"></div> Road</div>
-          </div>
         </div>
       </div>
     </section>
@@ -215,10 +211,12 @@
         <button class="settings-tab active" data-panel="panel-ports">Port Parameters</button>
         <button class="settings-tab" data-panel="panel-transport">Transport Costs</button>
         <button class="settings-tab" data-panel="panel-carbon">Carbon & Emissions</button>
+        <button class="settings-tab" data-panel="panel-distance">Distance Matrix</button>
       </div>
 
       <!-- Port Parameters -->
       <div class="settings-panel active" id="panel-ports">
+        <p class="settings-desc">Define each port's physical storage capacity, weekly holding costs, penalty leasing costs when empty, and local import/export demand.</p>
         <table>
           <thead>
             <tr>
@@ -236,6 +234,7 @@
 
       <!-- Transport Costs -->
       <div class="settings-panel" id="panel-transport">
+        <p class="settings-desc">Specify the unit repositioning cost (USD per TEU) between every port pair. Empty cells indicate no direct route.</p>
         <table>
           <thead>
             <tr>
@@ -253,11 +252,30 @@
 
       <!-- Carbon -->
       <div class="settings-panel" id="panel-carbon">
+        <p class="settings-desc">Set carbon emission rates for each transport mode (kg CO₂/TEU-km), the internal carbon price, and storage emission costs.</p>
         <table>
           <thead>
             <tr><th>Parameter</th><th>Value</th><th>Unit</th></tr>
           </thead>
           <tbody id="carbon-table-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Distance Matrix (read-only) -->
+      <div class="settings-panel" id="panel-distance">
+        <p class="settings-desc">The geographic distances (in km) and primary transport modes between port pairs. These values are fixed by the pre-configured network topology.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>From \ To</th>
+              <th>Cat Lai</th>
+              <th>Cai Mep</th>
+              <th>Hai Phong</th>
+              <th>Da Nang</th>
+              <th>Long An</th>
+            </tr>
+          </thead>
+          <tbody id="distance-table-body"></tbody>
         </table>
       </div>
 

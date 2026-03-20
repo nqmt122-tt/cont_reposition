@@ -60,6 +60,13 @@ const params = {
   carbon_factors: { sea: 0.016, barge: 0.020, road: 0.062 },
   carbon_price_per_kg: 0.005,
   storage_carbon_cost: 0.5,
+  distance_km: [
+    [0,    70,   1700, 960,  45  ],
+    [70,   0,    1730, 990,  115 ],
+    [1700, 1730, 0,    780,  1745],
+    [960,  990,  780,  0,    1005],
+    [45,   115,  1745, 1005, 0   ],
+  ],
 };
 
 
@@ -70,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSolveButton();
   initMapTabs();
   initMapbox();
+  updateCapacityLabels();
 });
 
 
@@ -451,6 +459,7 @@ function initSettingsModal() {
   document.getElementById('modal-close').addEventListener('click', () => modal.classList.remove('active'));
   document.getElementById('modal-apply').addEventListener('click', () => {
     readSettingsFromTables();
+    updateCapacityLabels();
     modal.classList.remove('active');
   });
   modal.addEventListener('click', e => {
@@ -506,6 +515,19 @@ function renderSettingsTables() {
     <tr><td>Carbon Price</td><td><input type="number" id="set-carbon-price" value="${params.carbon_price_per_kg}" step="0.001"></td><td>USD/kg CO₂</td></tr>
     <tr><td>Storage Carbon Cost</td><td><input type="number" id="set-storage-carbon" value="${params.storage_carbon_cost}" step="0.01"></td><td>USD/TEU/week</td></tr>
   `;
+
+  // Distance matrix (read-only)
+  const distBody = document.getElementById('distance-table-body');
+  distBody.innerHTML = PORTS.map((p, i) => {
+    return `<tr>
+      <td><strong>${PORT_LABELS[p]}</strong></td>
+      ${params.distance_km[i].map((dist, j) => {
+        if (i === j) return `<td style="color: var(--text-muted); opacity: 0.3;">—</td>`;
+        const mode = params.transport_modes[i][j];
+        return `<td>${dist.toLocaleString()} km<br><span style="font-size: 0.6rem; color: var(--text-muted);">${mode}</span></td>`;
+      }).join('')}
+    </tr>`;
+  }).join('');
 }
 
 function readSettingsFromTables() {
@@ -566,4 +588,13 @@ function formatNum(n) {
   if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2) + 'M';
   if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1) + 'K';
   return n.toFixed(0);
+}
+
+function updateCapacityLabels() {
+  PORTS.forEach(p => {
+    const el = document.getElementById(`cap-${p}`);
+    if (el) {
+      el.textContent = `Capacity: ${formatNum(params.ports[p].capacity)} TEU`;
+    }
+  });
 }
