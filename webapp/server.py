@@ -122,6 +122,8 @@ class SolveResponse(BaseModel):
     savings_s3_vs_s1: float
     port_labels: Dict[str, str]
     ports: List[str]
+    initial_inventory: Dict[str, float]
+    barrier_coefficient: float
 
 
 # ─── Solver Logic ────────────────────────────────────────────────────────────
@@ -387,6 +389,8 @@ def solve(req: SolveRequest):
         savings_s3_vs_s1=savings_s3,
         port_labels=PORT_LABELS,
         ports=PORTS,
+        initial_inventory=dict(zip(PORTS, initial_inv)),
+        barrier_coefficient=req.barrier_coefficient,
     )
 
 

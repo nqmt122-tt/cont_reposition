@@ -549,36 +549,196 @@ function readSettingsFromTables() {
 }
 
 
-// ─── AI Interpretation (Placeholder) ────────────────────────────────────────
-function showInterpretation() {
+// ─── AI Interpretation (Gemini Flash) ───────────────────────────────────────
+async function showInterpretation() {
   if (!solveResult) return;
+
   const div = document.getElementById('interpretation');
   const content = document.getElementById('interpretation-content');
   div.classList.add('active');
 
-  const s = solveResult.strategies;
-  const s1 = s[0].costs, s2 = s[1].costs, s3 = s[2].costs;
-  const s2Savings = solveResult.savings_s2_vs_s1;
-  const s3Savings = solveResult.savings_s3_vs_s1;
-
-  const biggestS1Cost = Object.entries({ Storage: s1.TC_H, Repositioning: s1.TC_R, Leasing: s1.TC_W, Carbon: s1.TC_C })
-    .sort((a, b) => b[1] - a[1])[0];
-
+  // Loading state
   content.innerHTML = `
-    <p><strong>🤖 AI Interpretation</strong> <span style="color: var(--text-muted); font-size: 0.78rem;">(Placeholder — connect your LLM API for dynamic insights)</span></p>
-    <p>Under the <strong>Status Quo (S1)</strong>, the total weekly cost is <strong>$${formatNum(s1.total)}</strong>,
-    with <strong>${biggestS1Cost[0]}</strong> being the dominant cost driver at $${formatNum(biggestS1Cost[1])}.
-    This reflects the inefficiency of disconnected port operations.</p>
-    <p>The <strong>Regional Threshold (S2)</strong> strategy reduces costs by <strong>${s2Savings.toFixed(1)}%</strong>
-    to $${formatNum(s2.total)}/week. Repositioning costs of $${formatNum(s2.TC_R)} are introduced
-    but are more than offset by reductions in leasing ($${formatNum(s1.TC_W)} → $${formatNum(s2.TC_W)}).</p>
-    <p>The <strong>National Network (S3)</strong> achieves the optimal solution at <strong>$${formatNum(s3.total)}/week</strong>,
-    a <strong>${s3Savings.toFixed(1)}%</strong> reduction. This scenario requires full inter-port coordination
-    and unified digital infrastructure.</p>
-    <p>💡 <strong>Annual savings potential:</strong> S2 saves ~$${formatNum((s1.total - s2.total) * 52)}/year,
-    while S3 saves ~$${formatNum((s1.total - s3.total) * 52)}/year compared to the status quo.</p>
-  `;
+    <p style="display:flex;align-items:center;gap:10px;">
+      <span style="display:inline-block;width:16px;height:16px;border:2px solid var(--accent-teal);border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;"></span>
+      <strong>🤖 Asking Gemini Flash…</strong>
+    </p>`;
   div.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // ── Build rich context prompt ─────────────────────────────────────────────
+  const s = solveResult.strategies;
+  const s1 = s[0], s2 = s[1], s3 = s[2];
+
+  // Active strategy on map tab
+  const activeTab = document.querySelector('.map-tab.active');
+  const activeStrategy = activeTab ? activeTab.dataset.strategy : 's3';
+
+  // Port parameters snapshot
+  const portRows = PORTS.map(p => {
+    const inv = solveResult.initial_inventory ? solveResult.initial_inventory[p] : '?';
+    const pr = params.ports[p];
+    return `  - ${PORT_LABELS[p]} (${PORT_REGIONS[p]}): Initial Inventory=${inv} TEU | Capacity=${pr.capacity} TEU | Storage=$${pr.storage_cost}/TEU/wk | Lease=$${pr.lease_cost}/TEU | Import=${pr.import_rate} TEU/wk | Export=${pr.export_rate} TEU/wk`;
+  }).join('\n');
+
+  // Flow table for S2 and S3
+  const buildFlowText = (strat) => {
+    const rows = [];
+    strat.flow_matrix.forEach((row, i) => {
+      row.forEach((val, j) => {
+        if (i !== j && val > 0) {
+          rows.push(`    ${PORT_LABELS[PORTS[i]]} → ${PORT_LABELS[PORTS[j]]}: ${val.toLocaleString()} TEU (${params.transport_modes[i][j]}, ${params.distance_km[i][j]} km)`);
+        }
+      });
+    });
+    return rows.length ? rows.join('\n') : '    (no repositioning flows)';
+  };
+
+  // Leasing summary
+  const buildLeasingText = (strat) => {
+    return PORTS.map(p => `    ${PORT_LABELS[p]}: ${strat.leasing[p].toLocaleString()} TEU leased`).join('\n');
+  };
+
+  const prompt = `You are an expert logistics analyst specializing in maritime container operations in Vietnam. Analyze the following solver output from an empty container repositioning optimization model and provide a concise, insightful interpretation for a research/academic audience.
+
+## CONTEXT: The Optimization Model
+The model minimizes total weekly cost across Vietnam's port network under 3 strategies:
+- **S1 (Status Quo):** No inter-port coordination. Each port leases containers independently when stock runs low.
+- **S2 (Regional Thresholds):** Ports share containers only when inventory exceeds a threshold (barrier coefficient s=${solveResult.barrier_coefficient ?? 0.5} × capacity). More realistic, requires basic coordination.
+- **S3 (National Network):** Full LP optimization — the solver freely moves containers across all ports to minimize total cost. Represents the theoretical optimum.
+
+Cost components:
+- **TC_H** — Holding/storage cost for containers sitting at port
+- **TC_R** — Repositioning transport cost (moving containers between ports)
+- **TC_W** — Leasing/penalty cost (when a port runs out and must rent from external sources)
+- **TC_C** — Carbon emission cost from transport
+
+## PORT PARAMETERS (this simulation run)
+${portRows}
+
+## SIMULATION RESULTS
+
+### S1: Status Quo (Baseline)
+- Total Weekly Cost: $${s1.costs.total.toLocaleString()}
+- TC_H (Holding): $${s1.costs.TC_H.toLocaleString()}
+- TC_R (Repositioning): $${s1.costs.TC_R.toLocaleString()}
+- TC_W (Leasing): $${s1.costs.TC_W.toLocaleString()}
+- TC_C (Carbon): $${s1.costs.TC_C.toLocaleString()}
+- Repositioning flows: ${buildFlowText(s1)}
+- Leasing: ${buildLeasingText(s1)}
+
+### S2: Regional Thresholds
+- Total Weekly Cost: $${s2.costs.total.toLocaleString()} (${solveResult.savings_s2_vs_s1.toFixed(1)}% savings vs S1)
+- TC_H / TC_R / TC_W / TC_C: $${s2.costs.TC_H.toLocaleString()} / $${s2.costs.TC_R.toLocaleString()} / $${s2.costs.TC_W.toLocaleString()} / $${s2.costs.TC_C.toLocaleString()}
+- Repositioning flows:
+${buildFlowText(s2)}
+- Leasing:
+${buildLeasingText(s2)}
+
+### S3: National Network (Optimal)
+- Total Weekly Cost: $${s3.costs.total.toLocaleString()} (${solveResult.savings_s3_vs_s1.toFixed(1)}% savings vs S1)
+- TC_H / TC_R / TC_W / TC_C: $${s3.costs.TC_H.toLocaleString()} / $${s3.costs.TC_R.toLocaleString()} / $${s3.costs.TC_W.toLocaleString()} / $${s3.costs.TC_C.toLocaleString()}
+- Repositioning flows:
+${buildFlowText(s3)}
+- Leasing:
+${buildLeasingText(s3)}
+
+## ANNUAL IMPACT
+- S2 annual savings vs S1: ~$${((s1.costs.total - s2.costs.total) * 52).toLocaleString()}
+- S3 annual savings vs S1: ~$${((s1.costs.total - s3.costs.total) * 52).toLocaleString()}
+
+## YOUR TASK
+Write a comprehensive, highly detailed analysis of these results. Structure your response in depth:
+1. **Status Quo Inefficiencies (S1)** — deep dive into why costs are so high under the current fragmented model, detailing the dominant cost factors.
+2. **Impact of Regional Coordination (S2)** — detailed flow analysis, specifying which ports are acting as surplus/deficit hubs, and exactly how the threshold strategy drives cost reductions.
+3. **National Network Optimization (S3)** — explain how the fully optimized network unlocks the lowest possible costs and where the most significant structural shifts occur compared to S1/S2.
+4. **Strategic Recommendations** — provide practical, concrete policy takeaways for Vietnamese port authorities or shipping lines.
+
+Use precise numbers from the results. Keep the tone analytical but accessible. Do not use markdown headers — use bold text and paragraph breaks only.`;
+
+  // ── Call Gemini Flash API ─────────────────────────────────────────────────
+  const apiKey = typeof GEMINI_API_KEY !== 'undefined' ? GEMINI_API_KEY : '';
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 2048,
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err?.error?.message || `HTTP ${response.status}`);
+    }
+
+    // Stream response using SSE reader
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+
+    content.innerHTML = `<p><strong>🤖 Gemini Flash Analysis</strong></p><div id="gemini-stream" style="white-space:pre-wrap;line-height:1.75;"></div>`;
+    const streamEl = document.getElementById('gemini-stream');
+
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (value) {
+        buffer += decoder.decode(value, { stream: true });
+        // Normalize Windows CRLF newlines to standard Unix newlines
+        buffer = buffer.replace(/\r\n/g, '\n');
+      }
+      
+      let eventBoundary = buffer.indexOf('\n\n');
+      while (eventBoundary !== -1) {
+        const eventStr = buffer.slice(0, eventBoundary);
+        buffer = buffer.slice(eventBoundary + 2);
+        
+        // Extract all 'data: ' lines from this event block
+        let dataPayload = '';
+        for (const line of eventStr.split('\n')) {
+          if (line.startsWith('data: ')) {
+            dataPayload += line.slice(6);
+          } else if (line.startsWith('data:')) {
+            dataPayload += line.slice(5);
+          }
+        }
+        
+        dataPayload = dataPayload.trim();
+        if (dataPayload && dataPayload !== '[DONE]') {
+          try {
+            const parsed = JSON.parse(dataPayload);
+            const part = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (part) {
+              fullText += part;
+              // Render with basic bold/paragraph support
+              streamEl.innerHTML = fullText
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/\n/g, '<br>');
+            }
+          } catch (e) {
+            console.error("Gemini SSE parse error:", e, dataPayload);
+          }
+        }
+        eventBoundary = buffer.indexOf('\n\n');
+      }
+
+      if (done) break;
+    }
+  } catch (err) {
+    content.innerHTML = `
+      <p><strong>🤖 Gemini Flash</strong> — <span style="color:var(--accent-red);">Error: ${err.message}</span></p>
+      <p style="font-size:0.8rem;color:var(--text-muted);">Check your API key in config.js or browser console for details.</p>`;
+  }
+
+  div.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 

@@ -1,18 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Empty Container Repositioning Optimizer — Vietnam</title>
-  <meta name="description" content="Interactive demo for optimizing empty container repositioning across Vietnam's port network using LP-based cost minimization.">
+  <meta name="description"
+    content="Interactive demo for optimizing empty container repositioning across Vietnam's port network using LP-based cost minimization.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
   <!-- Mapbox GL JS -->
   <script src='https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js'></script>
   <link href='https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css' rel='stylesheet' />
   <link rel="stylesheet" href="/static/styles.css">
 </head>
+
 <body>
 
   <!-- ═══════════════════ HERO ═══════════════════ -->
@@ -156,9 +161,6 @@
             <div class="section__title-icon">📊</div>
             Optimization Results (Weekly)
           </div>
-          <button class="btn btn--secondary" id="btn-interpret" title="AI Interpretation">
-            🤖 Interpret Results
-          </button>
         </div>
 
         <div class="results-combined">
@@ -175,6 +177,14 @@
 
           <!-- Right: Cost Cards (30%) -->
           <div class="results-costs-pane" id="results-cards"></div>
+        </div>
+
+        <!-- AI Interpretation Button -->
+        <div style="text-align: center; margin-top: 32px; padding-bottom: 10px;">
+          <button class="btn btn--secondary" id="btn-interpret" title="Temporarily Disabled" disabled
+            style="font-size: 1.1rem; padding: 12px 24px; box-shadow: none; opacity: 0.5; cursor: not-allowed; background: var(--bg-secondary); border-color: var(--border-glass);">
+            <strong style="font-size: 1.2em; color: var(--text-muted);">✨ Interpret These Results (Disabled)</strong>
+          </button>
         </div>
 
         <!-- AI Interpretation placeholder -->
@@ -216,7 +226,8 @@
 
       <!-- Port Parameters -->
       <div class="settings-panel active" id="panel-ports">
-        <p class="settings-desc">Define each port's physical storage capacity, weekly holding costs, penalty leasing costs when empty, and local import/export demand.</p>
+        <p class="settings-desc">Define each port's physical storage capacity, weekly holding costs, penalty leasing
+          costs when empty, and local import/export demand.</p>
         <table>
           <thead>
             <tr>
@@ -234,7 +245,8 @@
 
       <!-- Transport Costs -->
       <div class="settings-panel" id="panel-transport">
-        <p class="settings-desc">Specify the unit repositioning cost (USD per TEU) between every port pair. Empty cells indicate no direct route.</p>
+        <p class="settings-desc">Specify the unit repositioning cost (USD per TEU) between every port pair. Empty cells
+          indicate no direct route.</p>
         <table>
           <thead>
             <tr>
@@ -252,10 +264,15 @@
 
       <!-- Carbon -->
       <div class="settings-panel" id="panel-carbon">
-        <p class="settings-desc">Set carbon emission rates for each transport mode (kg CO₂/TEU-km), the internal carbon price, and storage emission costs.</p>
+        <p class="settings-desc">Set carbon emission rates for each transport mode (kg CO₂/TEU-km), the internal carbon
+          price, and storage emission costs.</p>
         <table>
           <thead>
-            <tr><th>Parameter</th><th>Value</th><th>Unit</th></tr>
+            <tr>
+              <th>Parameter</th>
+              <th>Value</th>
+              <th>Unit</th>
+            </tr>
           </thead>
           <tbody id="carbon-table-body"></tbody>
         </table>
@@ -263,7 +280,8 @@
 
       <!-- Distance Matrix (read-only) -->
       <div class="settings-panel" id="panel-distance">
-        <p class="settings-desc">The geographic distances (in km) and primary transport modes between port pairs. These values are fixed by the pre-configured network topology.</p>
+        <p class="settings-desc">The geographic distances (in km) and primary transport modes between port pairs. These
+          values are fixed by the pre-configured network topology.</p>
         <table>
           <thead>
             <tr>
@@ -295,4 +313,5 @@
   <script src="/static/config.js"></script>
   <script src="/static/app.js"></script>
 </body>
+
 </html>
