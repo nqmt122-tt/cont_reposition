@@ -14,3 +14,21 @@ README_Excel.md
 README_GoogleSheets.md
 save_results.gs
 webapp/static/config.js
+
+# Vercel
+.vercel/
+node_modules/
+
+# Newly added untracked files
+Results and Analysis - Empty Container Repositioning.md
+chapters_3_4_5_combined.md
+simulate_scenarios.py
+simulate_stochastic.py
+simulation_results.csv
+stochastic_results.csv
+webapp/.gitignore
+webapp/vercel.json
+write/
+cont_repo.md
+stochastic_barrier_sensitivity.csv
+test_stochastic_barrier.py
